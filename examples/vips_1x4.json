@@ -1,0 +1,13 @@
+[
+    {
+        "address": "10.0.0.100",
+        "port": 80,
+        "protocol": "udp",
+        "reals": [
+            {"address": "10.0.1.1"},
+            {"address": "10.0.1.2"},
+            {"address": "10.0.1.3"},
+            {"address": "10.0.1.4"}
+        ]
+    }
+]
