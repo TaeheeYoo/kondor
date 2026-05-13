@@ -16,7 +16,6 @@
 #define CTL_MAP_SIZE         16
 #define CH_RINGS_SIZE        (MAX_VIPS * RING_SIZE)
 #define STATS_MAP_SIZE       (MAX_VIPS * 2)
-#define MAX_SUPPORTED_CPUS   128
 #define DEFAULT_LRU_SIZE     1000000
 
 #define ONE_SEC              1000000000ULL  /* 1s in nanoseconds */

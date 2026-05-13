@@ -5,10 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
-	"runtime"
 	"sync"
 
-	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 
 	"github.com/patchwork-systems/kondor/internal/model"
@@ -66,21 +64,6 @@ func (m *Manager) Attach(ifName string) error {
 	if err != nil {
 		return fmt.Errorf("load BPF: %w", err)
 	}
-
-	numCPUs := runtime.NumCPU()
-	if numCPUs > 128 {
-		numCPUs = 128
-	}
-
-	innerSpec := &ebpf.MapSpec{
-		Type:       ebpf.LRUHash,
-		KeySize:    uint32(binary.Size(balancerFlowKey{})),
-		ValueSize:  uint32(binary.Size(balancerRealPosLru{})),
-		MaxEntries: 1000000,
-	}
-	outerSpec := spec.Maps["lru_mapping"]
-	outerSpec.MaxEntries = uint32(numCPUs)
-	outerSpec.InnerMap = innerSpec
 
 	objs := &balancerObjects{}
 	if err := spec.LoadAndAssign(objs, nil); err != nil {

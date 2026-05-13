@@ -37,20 +37,15 @@ static inline __u32 get_packet_hash(struct packet_description *pckt)
 __attribute__((__always_inline__))
 static inline bool connection_table_lookup(struct real_pos_lru **dst,
 					   struct packet_description *pckt,
-					   __u32 cpu_num, bool is_syn)
+					   bool is_syn)
 {
 	struct real_pos_lru *pos_lru;
-	void *lru_map;
 	__u64 cur_time;
 
 	if (is_syn)
 		return false;
 
-	lru_map = bpf_map_lookup_elem(&lru_mapping, &cpu_num);
-	if (!lru_map)
-		return false;
-
-	pos_lru = bpf_map_lookup_elem(lru_map, &pckt->flow);
+	pos_lru = bpf_map_lookup_elem(&conn_cache, &pckt->flow);
 	if (!pos_lru)
 		return false;
 
@@ -67,26 +62,21 @@ static inline bool connection_table_lookup(struct real_pos_lru **dst,
 
 __attribute__((__always_inline__))
 static inline void connection_table_insert(struct packet_description *pckt,
-					   __u32 cpu_num, __u32 pos)
+					   __u32 pos)
 {
 	struct real_pos_lru new_entry = {};
-	void *lru_map;
 
 	new_entry.pos = pos;
 	new_entry.atime = bpf_ktime_get_ns();
 
-	lru_map = bpf_map_lookup_elem(&lru_mapping, &cpu_num);
-	if (!lru_map)
-		return;
-
-	bpf_map_update_elem(lru_map, &pckt->flow, &new_entry, BPF_ANY);
+	bpf_map_update_elem(&conn_cache, &pckt->flow, &new_entry, BPF_ANY);
 }
 
 __attribute__((__always_inline__))
 static inline int get_packet_dst(struct real_definition **real,
 				 struct packet_description *pckt,
 				 struct vip_meta *vip_info,
-				 __u32 cpu_num, bool is_syn)
+				 bool is_syn)
 {
 	struct lb_stats *conn_rate;
 	struct real_pos_lru *dst_lru;
@@ -94,7 +84,7 @@ static inline int get_packet_dst(struct real_definition **real,
 	__u32 hash, key, *real_pos;
 
 	if (!(vip_info->flags & F_LRU_BYPASS) &&
-	    connection_table_lookup(&dst_lru, pckt, cpu_num, is_syn)) {
+	    connection_table_lookup(&dst_lru, pckt, is_syn)) {
 		*real = bpf_map_lookup_elem(&reals, &dst_lru->pos);
 		if (*real)
 			return 0;
@@ -121,7 +111,7 @@ static inline int get_packet_dst(struct real_definition **real,
 						&((__u32){ MAX_VIPS + NEW_CONN_RATE_CNTR }));
 		if (conn_rate && conn_rate->v1 < MAX_CONN_RATE) {
 			__sync_fetch_and_add(&conn_rate->v1, 1);
-			connection_table_insert(pckt, cpu_num, *real_pos);
+			connection_table_insert(pckt, *real_pos);
 		}
 	}
 
@@ -191,7 +181,7 @@ static inline int process_packet(void *data, __u64 pkt_off,
 
 	is_syn = pckt.flags & F_SYN_SET;
 
-	if (get_packet_dst(&dst, &pckt, vip_info, 0, is_syn))
+	if (get_packet_dst(&dst, &pckt, vip_info, is_syn))
 		return XDP_DROP;
 	if (!dst)
 		return XDP_DROP;

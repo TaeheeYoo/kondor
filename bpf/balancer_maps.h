@@ -16,30 +16,11 @@ struct {
 } vip_map SEC(".maps");
 
 struct {
-	__uint(type, BPF_MAP_TYPE_LRU_HASH);
+	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, DEFAULT_LRU_SIZE);
 	__type(key, struct flow_key);
 	__type(value, struct real_pos_lru);
-} lru_cache_inner SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_ARRAY_OF_MAPS);
-	__uint(max_entries, MAX_SUPPORTED_CPUS);
-	__type(key, __u32);
-	__array(values, struct {
-		__uint(type, BPF_MAP_TYPE_LRU_HASH);
-		__uint(max_entries, DEFAULT_LRU_SIZE);
-		__type(key, struct flow_key);
-		__type(value, struct real_pos_lru);
-	});
-} lru_mapping SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_LRU_HASH);
-	__uint(max_entries, DEFAULT_LRU_SIZE);
-	__type(key, struct flow_key);
-	__type(value, struct real_pos_lru);
-} fallback_cache SEC(".maps");
+} conn_cache SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
