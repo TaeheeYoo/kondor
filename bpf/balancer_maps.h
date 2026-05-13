@@ -56,14 +56,14 @@ struct {
 } reals SEC(".maps");
 
 struct {
-	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__uint(max_entries, MAX_REALS);
 	__type(key, __u32);
 	__type(value, struct lb_stats);
 } reals_stats SEC(".maps");
 
 struct {
-	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__uint(max_entries, STATS_MAP_SIZE);
 	__type(key, __u32);
 	__type(value, struct lb_stats);

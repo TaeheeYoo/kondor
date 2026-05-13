@@ -24,8 +24,8 @@ static inline void increment_stats(int offset, struct lb_stats *delta)
 	counters = bpf_map_lookup_elem(&stats, &key);
 	if (!counters)
 		return;
-	counters->v1 += delta->v1;
-	counters->v2 += delta->v2;
+	__sync_fetch_and_add(&counters->v1, delta->v1);
+	__sync_fetch_and_add(&counters->v2, delta->v2);
 }
 
 __attribute__((__always_inline__))
@@ -143,7 +143,6 @@ static inline int process_packet(void *data, __u64 pkt_off,
 	__u16 pkt_bytes = 0;
 	__u8 protocol = 0;
 	__u32 vip_num;
-	__u32 cpu_num;
 	bool is_syn;
 	int ret;
 
@@ -178,8 +177,8 @@ static inline int process_packet(void *data, __u64 pkt_off,
 	vip_num = vip_info->vip_num;
 	per_vip = bpf_map_lookup_elem(&stats, &vip_num);
 	if (per_vip) {
-		per_vip->v1 += pkt_delta.v1;
-		per_vip->v2 += pkt_delta.v2;
+		__sync_fetch_and_add(&per_vip->v1, pkt_delta.v1);
+		__sync_fetch_and_add(&per_vip->v2, pkt_delta.v2);
 	}
 
 	if (vip_info->flags & F_HASH_NO_SRC_PORT)
@@ -191,17 +190,16 @@ static inline int process_packet(void *data, __u64 pkt_off,
 	}
 
 	is_syn = pckt.flags & F_SYN_SET;
-	cpu_num = bpf_get_smp_processor_id();
 
-	if (get_packet_dst(&dst, &pckt, vip_info, cpu_num, is_syn))
+	if (get_packet_dst(&dst, &pckt, vip_info, 0, is_syn))
 		return XDP_DROP;
 	if (!dst)
 		return XDP_DROP;
 
 	per_real = bpf_map_lookup_elem(&reals_stats, &pckt.real_index);
 	if (per_real) {
-		per_real->v1 += 1;
-		per_real->v2 += pkt_bytes;
+		__sync_fetch_and_add(&per_real->v1, 1);
+		__sync_fetch_and_add(&per_real->v2, pkt_bytes);
 	}
 
 	cval = bpf_map_lookup_elem(&ctl_array,

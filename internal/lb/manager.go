@@ -328,17 +328,15 @@ func (m *Manager) GetStats(vip model.VIP) (*model.StatsEntry, error) {
 		return nil, fmt.Errorf("VIP %s not found", key)
 	}
 
-	var values []balancerLbStats
-	if err := m.objs.Stats.Lookup(state.vipNum, &values); err != nil {
+	var val balancerLbStats
+	if err := m.objs.Stats.Lookup(state.vipNum, &val); err != nil {
 		return nil, err
 	}
 
-	entry := &model.StatsEntry{}
-	for _, v := range values {
-		entry.Packets += v.V1
-		entry.Bytes += v.V2
-	}
-	return entry, nil
+	return &model.StatsEntry{
+		Packets: val.V1,
+		Bytes:   val.V2,
+	}, nil
 }
 
 func (m *Manager) GetGlobalStats() map[string]uint64 {
@@ -353,15 +351,11 @@ func (m *Manager) GetGlobalStats() map[string]uint64 {
 
 	for offset, name := range names {
 		key := uint32(512 + offset)
-		var values []balancerLbStats
-		if err := m.objs.Stats.Lookup(key, &values); err != nil {
+		var val balancerLbStats
+		if err := m.objs.Stats.Lookup(key, &val); err != nil {
 			continue
 		}
-		var total uint64
-		for _, v := range values {
-			total += v.V1
-		}
-		result[name] = total
+		result[name] = val.V1
 	}
 	return result
 }
