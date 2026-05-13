@@ -56,7 +56,7 @@ func NewManager() *Manager {
 	}
 }
 
-func (m *Manager) Attach(ifName string) error {
+func (m *Manager) Attach(ifName string, offload bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -77,10 +77,14 @@ func (m *Manager) Attach(ifName string) error {
 		return fmt.Errorf("interface %s: %w", ifName, err)
 	}
 
-	l, err := link.AttachXDP(link.XDPOptions{
+	xdpOpts := link.XDPOptions{
 		Program:   objs.BalancerIngress,
 		Interface: iface.Index,
-	})
+	}
+	if offload {
+		xdpOpts.Flags = link.XDPOffloadMode
+	}
+	l, err := link.AttachXDP(xdpOpts)
 	if err != nil {
 		objs.Close()
 		return fmt.Errorf("attach XDP: %w", err)

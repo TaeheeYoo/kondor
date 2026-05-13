@@ -45,6 +45,7 @@ func serveCmd() *cobra.Command {
 		intf    string
 		port    int
 		mac     string
+		offload bool
 	)
 
 	cmd := &cobra.Command{
@@ -53,7 +54,7 @@ func serveCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mgr := lb.NewManager()
 
-			if err := mgr.Attach(intf); err != nil {
+			if err := mgr.Attach(intf, offload); err != nil {
 				return fmt.Errorf("attach to %s: %w", intf, err)
 			}
 			defer mgr.Close()
@@ -86,6 +87,7 @@ func serveCmd() *cobra.Command {
 	cmd.Flags().StringVar(&intf, "intf", "", "Network interface")
 	cmd.Flags().IntVar(&port, "port", 8080, "API listen port")
 	cmd.Flags().StringVar(&mac, "mac", "", "Router MAC address (next-hop)")
+	cmd.Flags().BoolVar(&offload, "offload", false, "Use XDP hardware offload mode")
 	cmd.MarkFlagRequired("intf")
 
 	return cmd
