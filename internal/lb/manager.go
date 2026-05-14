@@ -60,9 +60,24 @@ func (m *Manager) Attach(ifName string, offload bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	iface, err := net.InterfaceByName(ifName)
+	if err != nil {
+		return fmt.Errorf("interface %s: %w", ifName, err)
+	}
+
 	spec, err := loadBalancer()
 	if err != nil {
 		return fmt.Errorf("load BPF: %w", err)
+	}
+
+	if offload {
+		ifidx := uint32(iface.Index)
+		for _, ps := range spec.Programs {
+			ps.Ifindex = ifidx
+		}
+		for _, ms := range spec.Maps {
+			ms.Ifindex = ifidx
+		}
 	}
 
 	objs := &balancerObjects{}
@@ -70,12 +85,6 @@ func (m *Manager) Attach(ifName string, offload bool) error {
 		return fmt.Errorf("load objects: %w", err)
 	}
 	m.objs = objs
-
-	iface, err := net.InterfaceByName(ifName)
-	if err != nil {
-		objs.Close()
-		return fmt.Errorf("interface %s: %w", ifName, err)
-	}
 
 	xdpOpts := link.XDPOptions{
 		Program:   objs.BalancerIngress,
