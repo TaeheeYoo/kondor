@@ -5,14 +5,8 @@
 #include <linux/types.h>
 
 struct flow_key {
-	union {
-		__be32 src;
-		__be32 srcv6[4];
-	};
-	union {
-		__be32 dst;
-		__be32 dstv6[4];
-	};
+	__be32 src;
+	__be32 dst;
 	union {
 		__u32 ports;
 		__u16 port16[2];
@@ -36,10 +30,7 @@ struct ctl_value {
 };
 
 struct vip_definition {
-	union {
-		__be32 vip;
-		__be32 vipv6[4];
-	};
+	__be32 vip;
 	__u16 port;
 	__u8 proto;
 };
@@ -55,10 +46,7 @@ struct real_pos_lru {
 };
 
 struct real_definition {
-	union {
-		__be32 dst;
-		__be32 dstv6[4];
-	};
+	__be32 dst;
 	__u8 flags;
 };
 

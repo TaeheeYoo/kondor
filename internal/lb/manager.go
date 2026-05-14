@@ -39,6 +39,10 @@ func ip4ToU32(ip net.IP) uint32 {
 	return binary.NativeEndian.Uint32(b)
 }
 
+func htons(v uint16) uint16 {
+	return (v << 8) | (v >> 8)
+}
+
 func protoNum(proto string) uint8 {
 	switch proto {
 	case "tcp":
@@ -152,7 +156,7 @@ func (m *Manager) AddVIP(cfg model.VIPConfig) error {
 
 	mapKey := balancerVipDefinition{}
 	mapKey.Vip = ip4ToU32(cfg.VIP.Address)
-	mapKey.Port = cfg.VIP.Port
+	mapKey.Port = htons(cfg.VIP.Port)
 	mapKey.Proto = protoNum(cfg.VIP.Protocol)
 
 	mapVal := balancerVipMeta{
@@ -201,7 +205,7 @@ func (m *Manager) DeleteVIP(vip model.VIP) error {
 
 	mapKey := balancerVipDefinition{}
 	mapKey.Vip = ip4ToU32(vip.Address)
-	mapKey.Port = vip.Port
+	mapKey.Port = htons(vip.Port)
 	mapKey.Proto = protoNum(vip.Protocol)
 
 	m.objs.VipMap.Delete(&mapKey)
