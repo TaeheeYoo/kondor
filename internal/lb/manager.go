@@ -75,9 +75,6 @@ func (m *Manager) Attach(ifName string, offload bool) error {
 		for _, ps := range spec.Programs {
 			ps.Ifindex = ifidx
 		}
-		for _, ms := range spec.Maps {
-			ms.Ifindex = ifidx
-		}
 	}
 
 	objs := &balancerObjects{}
