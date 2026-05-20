@@ -34,7 +34,7 @@ func (m *Manager) attachOffload(ifName string, ifIndex int) error {
 	os.MkdirAll(pinBase, 0700)
 
 	out, err := exec.Command("bpftool", "prog", "loadall",
-		tmpPath, pinBase, "pinmaps", pinBase, "dev", ifName).CombinedOutput()
+		tmpPath, pinBase, "pinmaps", pinBase, "offload_dev", ifName).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("bpftool loadall: %s: %w", string(out), err)
 	}
