@@ -322,14 +322,20 @@ func (m *Manager) GetStats(vip model.VIP) (*model.StatsEntry, error) {
 		return nil, fmt.Errorf("VIP %s not found", key)
 	}
 
-	var val balancerLbStats
-	if err := m.objs.Stats.Lookup(state.vipNum, &val); err != nil {
+	// stats is a PERCPU_ARRAY: sum the per-CPU (per-GPU-instance) values.
+	var perCPU []balancerLbStats
+	if err := m.objs.Stats.Lookup(state.vipNum, &perCPU); err != nil {
 		return nil, err
 	}
 
+	var packets, bytes uint64
+	for i := range perCPU {
+		packets += perCPU[i].V1
+		bytes += perCPU[i].V2
+	}
 	return &model.StatsEntry{
-		Packets: val.V1,
-		Bytes:   val.V2,
+		Packets: packets,
+		Bytes:   bytes,
 	}, nil
 }
 
@@ -345,11 +351,15 @@ func (m *Manager) GetGlobalStats() map[string]uint64 {
 
 	for offset, name := range names {
 		key := uint32(512 + offset)
-		var val balancerLbStats
-		if err := m.objs.Stats.Lookup(key, &val); err != nil {
+		var perCPU []balancerLbStats
+		if err := m.objs.Stats.Lookup(key, &perCPU); err != nil {
 			continue
 		}
-		result[name] = val.V1
+		var sum uint64
+		for i := range perCPU {
+			sum += perCPU[i].V1
+		}
+		result[name] = sum
 	}
 	return result
 }
