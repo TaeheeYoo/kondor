@@ -339,11 +339,11 @@ func (m *Manager) GetStats(vip model.VIP) (*model.StatsEntry, error) {
 	}, nil
 }
 
-func (m *Manager) GetGlobalStats() map[string]uint64 {
+func (m *Manager) GetGlobalStats() map[string]model.StatsEntry {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	result := make(map[string]uint64)
+	result := make(map[string]model.StatsEntry)
 	names := map[int]string{
 		16: "total", 17: "tx", 18: "drop", 19: "pass",
 		1: "lru_miss", 7: "encap_fail",
@@ -355,11 +355,15 @@ func (m *Manager) GetGlobalStats() map[string]uint64 {
 		if err := m.objs.Stats.Lookup(key, &perCPU); err != nil {
 			continue
 		}
-		var sum uint64
+		// Only the total counter carries bytes; the rest are counted
+		// after the head may have moved, where the length is no longer
+		// there to read.
+		var e model.StatsEntry
 		for i := range perCPU {
-			sum += perCPU[i].V1
+			e.Packets += perCPU[i].V1
+			e.Bytes += perCPU[i].V2
 		}
-		result[name] = sum
+		result[name] = e
 	}
 	return result
 }
