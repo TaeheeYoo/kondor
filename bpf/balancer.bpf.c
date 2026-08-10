@@ -227,10 +227,14 @@ int balancer_ingress(struct xdp_md *ctx)
 		return XDP_PASS;
 
 	total_delta.v1 += 1;
+	total_delta.v2 += data_end - data;
 	increment_stats(XDP_TOTAL_CNTR, &total_delta);
 
 	action = process_packet(data, sizeof(struct ethhdr), data_end, ctx);
 
+	/* No byte count here: process_packet() may have moved the head, which
+	 * leaves data and data_end behind.
+	 */
 	act_delta.v1 += 1;
 	if (action == XDP_TX)
 		increment_stats(XDP_TX_CNTR, &act_delta);
