@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/cilium/ebpf/link"
@@ -30,8 +32,12 @@ type Manager struct {
 	realPool   []uint32 // freed real indices
 }
 
+// The protocol arrives as whatever the caller typed, so it is folded here -
+// otherwise "udp" and "UDP" name two different VIPs and only one of them is
+// ever found again.
 func vipKey(vip model.VIP) string {
-	return fmt.Sprintf("%s:%d/%s", vip.Address, vip.Port, vip.Protocol)
+	return fmt.Sprintf("%s:%d/%s", vip.Address, vip.Port,
+		strings.ToLower(vip.Protocol))
 }
 
 func ip4ToU32(ip net.IP) uint32 {
@@ -43,8 +49,12 @@ func htons(v uint16) uint16 {
 	return (v << 8) | (v >> 8)
 }
 
+/* Zero for anything else, which no packet carries, so a VIP added with a
+ * protocol this does not know would sit in the map and never match.  Callers
+ * check.
+ */
 func protoNum(proto string) uint8 {
-	switch proto {
+	switch strings.ToLower(proto) {
 	case "tcp":
 		return 6
 	case "udp":
@@ -158,6 +168,10 @@ func (m *Manager) AddVIP(cfg model.VIPConfig) error {
 	mapKey.Vip = ip4ToU32(cfg.VIP.Address)
 	mapKey.Port = htons(cfg.VIP.Port)
 	mapKey.Proto = protoNum(cfg.VIP.Protocol)
+	if mapKey.Proto == 0 {
+		return fmt.Errorf("unknown protocol %q, expected tcp or udp",
+			cfg.VIP.Protocol)
+	}
 
 	mapVal := balancerVipMeta{
 		Flags:  cfg.Flags,
@@ -319,7 +333,18 @@ func (m *Manager) GetStats(vip model.VIP) (*model.StatsEntry, error) {
 	key := vipKey(vip)
 	state, exists := m.vips[key]
 	if !exists {
-		return nil, fmt.Errorf("VIP %s not found", key)
+		// Say what was asked for and what there was, because the two
+		// differing by a character is the usual reason to be here.
+		known := make([]string, 0, len(m.vips))
+		for k := range m.vips {
+			known = append(known, k)
+		}
+		sort.Strings(known)
+		if len(known) == 0 {
+			return nil, fmt.Errorf("VIP %s not found; none are configured", key)
+		}
+		return nil, fmt.Errorf("VIP %s not found; configured: %s",
+			key, strings.Join(known, ", "))
 	}
 
 	// stats is a PERCPU_ARRAY: sum the per-CPU (per-GPU-instance) values.
