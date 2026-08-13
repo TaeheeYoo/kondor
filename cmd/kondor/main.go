@@ -94,29 +94,59 @@ func serveCmd() *cobra.Command {
 	return cmd
 }
 
+/* Mirrors the F_* flags the balancer reads out of vip_meta. */
+const (
+	flagHashNoSrcPort = 1 << 0
+	flagLRUBypass     = 1 << 1
+	flagHashDportOnly = 1 << 3
+)
+
 func vipCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "vip",
 		Short: "Manage VIPs",
 	}
 
+	var lruBypass bool
+	var hashNoSrcPort bool
+	var hashDportOnly bool
+
 	addCmd := &cobra.Command{
 		Use:   "add <address> <port> <tcp|udp>",
 		Short: "Add a VIP",
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var flags uint32
+
 			port, err := parsePort(args[1])
 			if err != nil {
 				return err
+			}
+			if lruBypass {
+				flags |= flagLRUBypass
+			}
+			if hashNoSrcPort {
+				flags |= flagHashNoSrcPort
+			}
+			if hashDportOnly {
+				flags |= flagHashDportOnly
 			}
 			body := map[string]interface{}{
 				"address":  args[0],
 				"port":     port,
 				"protocol": strings.ToLower(args[2]),
+				"flags":    flags,
 			}
 			return apiPost("/api/v1/vips", body)
 		},
 	}
+
+	addCmd.Flags().BoolVar(&lruBypass, "lru-bypass", false,
+		"Do not keep a connection table for this VIP")
+	addCmd.Flags().BoolVar(&hashNoSrcPort, "hash-no-src-port", false,
+		"Leave the source port out of the hash")
+	addCmd.Flags().BoolVar(&hashDportOnly, "hash-dport-only", false,
+		"Hash on the destination port alone")
 
 	listCmd := &cobra.Command{
 		Use:   "list",
