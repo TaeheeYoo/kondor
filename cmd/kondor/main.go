@@ -260,13 +260,19 @@ func statsCmd() *cobra.Command {
 }
 
 func cacheCmd() *cobra.Command {
-	return &cobra.Command{
+	var limit int
+
+	cmd := &cobra.Command{
 		Use:   "cache",
 		Short: "Show what the connection table is holding",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return apiGet("/api/v1/conncache")
+			return apiGet(fmt.Sprintf("/api/v1/conncache?limit=%d", limit))
 		},
 	}
+	cmd.Flags().IntVar(&limit, "limit", 100,
+		"list at most this many flows (0 for all)")
+
+	return cmd
 }
 
 func flushCmd() *cobra.Command {

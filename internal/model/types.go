@@ -25,12 +25,23 @@ type StatsEntry struct {
 	Bytes   uint64 `json:"bytes"`
 }
 
+// One flow held in the connection table, and the real it was pinned to.
+type ConnCacheEntry struct {
+	Src   string `json:"src"`
+	Dst   string `json:"dst"`
+	Proto string `json:"proto"`
+	Real  string `json:"real"`
+	Atime uint64 `json:"atime_ns"`
+}
+
 // What the connection table holds right now: how many flows are in it, how
 // much room there is, which real each one was pinned to, and how far apart the
 // least and most recently used of them were touched.
 type ConnCacheInfo struct {
-	Entries  int            `json:"entries"`
-	Capacity uint32         `json:"capacity"`
-	ByReal   map[uint32]int `json:"by_real,omitempty"`
-	Spread   uint64         `json:"atime_spread_ns,omitempty"`
+	Entries   int              `json:"entries"`
+	Capacity  uint32           `json:"capacity"`
+	ByReal    map[string]int   `json:"by_real,omitempty"`
+	Spread    uint64           `json:"atime_spread_ns,omitempty"`
+	Truncated bool             `json:"truncated,omitempty"`
+	Flows     []ConnCacheEntry `json:"flows,omitempty"`
 }
