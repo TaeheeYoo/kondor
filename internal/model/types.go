@@ -31,17 +31,14 @@ type ConnCacheEntry struct {
 	Dst   string `json:"dst"`
 	Proto string `json:"proto"`
 	Real  string `json:"real"`
-	Atime uint64 `json:"atime_ns"`
 }
 
 // What the connection table holds right now: how many flows are in it, how
-// much room there is, which real each one was pinned to, and how far apart the
-// least and most recently used of them were touched.
+// much room there is, and which real each one was pinned to.
 type ConnCacheInfo struct {
 	Entries   int              `json:"entries"`
 	Capacity  uint32           `json:"capacity"`
 	ByReal    map[string]int   `json:"by_real,omitempty"`
-	Spread    uint64           `json:"atime_spread_ns,omitempty"`
 	Truncated bool             `json:"truncated,omitempty"`
 	Flows     []ConnCacheEntry `json:"flows,omitempty"`
 }
