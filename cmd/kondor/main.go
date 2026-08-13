@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -33,6 +34,7 @@ func main() {
 	root.AddCommand(vipCmd())
 	root.AddCommand(realCmd())
 	root.AddCommand(statsCmd())
+	root.AddCommand(cacheCmd())
 	root.AddCommand(flushCmd())
 
 	if err := root.Execute(); err != nil {
@@ -93,25 +95,59 @@ func serveCmd() *cobra.Command {
 	return cmd
 }
 
+/* Mirrors the F_* flags the balancer reads out of vip_meta. */
+const (
+	flagHashNoSrcPort = 1 << 0
+	flagLRUBypass     = 1 << 1
+	flagHashDportOnly = 1 << 3
+)
+
 func vipCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "vip",
 		Short: "Manage VIPs",
 	}
 
+	var lruBypass bool
+	var hashNoSrcPort bool
+	var hashDportOnly bool
+
 	addCmd := &cobra.Command{
 		Use:   "add <address> <port> <tcp|udp>",
 		Short: "Add a VIP",
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var flags uint32
+
+			port, err := parsePort(args[1])
+			if err != nil {
+				return err
+			}
+			if lruBypass {
+				flags |= flagLRUBypass
+			}
+			if hashNoSrcPort {
+				flags |= flagHashNoSrcPort
+			}
+			if hashDportOnly {
+				flags |= flagHashDportOnly
+			}
 			body := map[string]interface{}{
 				"address":  args[0],
-				"port":     parsePort(args[1]),
-				"protocol": args[2],
+				"port":     port,
+				"protocol": strings.ToLower(args[2]),
+				"flags":    flags,
 			}
 			return apiPost("/api/v1/vips", body)
 		},
 	}
+
+	addCmd.Flags().BoolVar(&lruBypass, "lru-bypass", false,
+		"Do not keep a connection table for this VIP")
+	addCmd.Flags().BoolVar(&hashNoSrcPort, "hash-no-src-port", false,
+		"Leave the source port out of the hash")
+	addCmd.Flags().BoolVar(&hashDportOnly, "hash-dport-only", false,
+		"Hash on the destination port alone")
 
 	listCmd := &cobra.Command{
 		Use:   "list",
@@ -126,10 +162,14 @@ func vipCmd() *cobra.Command {
 		Short: "Delete a VIP",
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			port, err := parsePort(args[1])
+			if err != nil {
+				return err
+			}
 			body := map[string]interface{}{
 				"address":  args[0],
-				"port":     parsePort(args[1]),
-				"protocol": args[2],
+				"port":     port,
+				"protocol": strings.ToLower(args[2]),
 			}
 			return apiDelete("/api/v1/vips", body)
 		},
@@ -219,6 +259,16 @@ func statsCmd() *cobra.Command {
 	return cmd
 }
 
+func cacheCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "cache",
+		Short: "Show what the connection table is holding",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return apiGet("/api/v1/conncache")
+		},
+	}
+}
+
 func flushCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "flush",
@@ -235,18 +285,27 @@ func parseVIPFlag(s string) (string, int, string, error) {
 	if len(parts) != 2 {
 		return "", 0, "", fmt.Errorf("invalid VIP format, expected addr:port/proto")
 	}
-	proto := parts[1]
+	proto := strings.ToLower(parts[1])
 	host, portStr, err := net.SplitHostPort(parts[0])
 	if err != nil {
 		return "", 0, "", fmt.Errorf("invalid VIP address:port: %w", err)
 	}
-	return host, parsePort(portStr), proto, nil
+	if net.ParseIP(host) == nil {
+		return "", 0, "", fmt.Errorf("invalid VIP address %q", host)
+	}
+	port, err := parsePort(portStr)
+	if err != nil {
+		return "", 0, "", err
+	}
+	return host, port, proto, nil
 }
 
-func parsePort(s string) int {
-	var p int
-	fmt.Sscanf(s, "%d", &p)
-	return p
+func parsePort(s string) (int, error) {
+	p, err := strconv.Atoi(s)
+	if err != nil || p < 1 || p > 65535 {
+		return 0, fmt.Errorf("invalid port %q", s)
+	}
+	return p, nil
 }
 
 func apiPost(path string, body interface{}) error {
