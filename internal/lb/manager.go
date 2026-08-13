@@ -395,7 +395,7 @@ func (m *Manager) realName(pos uint32) string {
  * ports sit in a union there, which is awkward to name from Go, and both the
  * addresses and the ports are already in the order they are printed in.
  */
-func flowFromKey(key []byte, atime uint64, name string) model.ConnCacheEntry {
+func flowFromKey(key []byte, name string) model.ConnCacheEntry {
 	srcPort := strconv.Itoa(int(binary.BigEndian.Uint16(key[8:10])))
 	dstPort := strconv.Itoa(int(binary.BigEndian.Uint16(key[10:12])))
 
@@ -404,20 +404,18 @@ func flowFromKey(key []byte, atime uint64, name string) model.ConnCacheEntry {
 		Dst:   net.JoinHostPort(net.IP(key[4:8]).String(), dstPort),
 		Proto: protoName(key[12]),
 		Real:  name,
-		Atime: atime,
 	}
 }
 
-// A flow only stays in the connection table while it is being used, so what is
-// in there says as much about the traffic as about the table.  A count far
-// below the number of flows offered means entries are not landing; the spread
-// in atime says whether they are being aged out instead.
+// A flow stays in the connection table from the first packet that missed until
+// something removes it, so what is in there says as much about the traffic as
+// about the table.  A count far below the number of flows offered means entries
+// are not landing.
 //
 // limit caps how many flows are listed; zero lists all of them.  The counts
 // cover the whole table either way.
 func (m *Manager) ConnCacheInfo(limit int) (*model.ConnCacheInfo, error) {
 	var val balancerRealPosLru
-	var oldest, newest uint64
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -432,12 +430,6 @@ func (m *Manager) ConnCacheInfo(limit int) (*model.ConnCacheInfo, error) {
 
 	it := m.objs.ConnCache.Iterate()
 	for it.Next(&key, &val) {
-		if info.Entries == 0 || val.Atime < oldest {
-			oldest = val.Atime
-		}
-		if val.Atime > newest {
-			newest = val.Atime
-		}
 		info.Entries++
 
 		name, seen := names[val.Pos]
@@ -454,17 +446,11 @@ func (m *Manager) ConnCacheInfo(limit int) (*model.ConnCacheInfo, error) {
 			info.Truncated = true
 			continue
 		}
-		info.Flows = append(info.Flows, flowFromKey(key, val.Atime, name))
+		info.Flows = append(info.Flows, flowFromKey(key, name))
 	}
 	if err := it.Err(); err != nil {
 		return nil, err
 	}
-
-	/* atime comes from the GPU's snapshot of ktime, so the spread between
-	 * the two ends is reported rather than an age against a host clock that
-	 * reads differently.
-	 */
-	info.Spread = newest - oldest
 
 	return info, nil
 }

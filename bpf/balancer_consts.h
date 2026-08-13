@@ -18,9 +18,6 @@
 #define STATS_MAP_SIZE       (MAX_VIPS * 2)
 #define DEFAULT_LRU_SIZE     1000000
 
-#define ONE_SEC              1000000000ULL  /* 1s in nanoseconds */
-#define LRU_UDP_TIMEOUT      (30 * ONE_SEC)
-
 /* VIP flags */
 #define F_HASH_NO_SRC_PORT   (1 << 0)
 #define F_LRU_BYPASS         (1 << 1)

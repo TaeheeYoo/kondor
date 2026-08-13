@@ -42,7 +42,6 @@ struct vip_meta {
 
 struct real_pos_lru {
 	__u32 pos;
-	__u64 atime;
 };
 
 struct real_definition {

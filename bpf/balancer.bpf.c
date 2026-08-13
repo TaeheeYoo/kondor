@@ -40,7 +40,6 @@ static inline bool connection_table_lookup(struct real_pos_lru **dst,
 					   bool is_syn)
 {
 	struct real_pos_lru *pos_lru;
-	__u64 cur_time;
 
 	if (is_syn)
 		return false;
@@ -48,13 +47,6 @@ static inline bool connection_table_lookup(struct real_pos_lru **dst,
 	pos_lru = bpf_map_lookup_elem(&conn_cache, &pckt->flow);
 	if (!pos_lru)
 		return false;
-
-	if (pckt->flow.proto == IPPROTO_UDP) {
-		cur_time = bpf_ktime_get_ns();
-		if (cur_time - pos_lru->atime > LRU_UDP_TIMEOUT)
-			return false;
-		pos_lru->atime = cur_time;
-	}
 
 	*dst = pos_lru;
 	return true;
@@ -67,7 +59,6 @@ static inline void connection_table_insert(struct packet_description *pckt,
 	struct real_pos_lru new_entry = {};
 
 	new_entry.pos = pos;
-	new_entry.atime = bpf_ktime_get_ns();
 
 	bpf_map_update_elem(&conn_cache, &pckt->flow, &new_entry, BPF_ANY);
 }
