@@ -15,6 +15,35 @@
 #include "pckt_encap.h"
 #include "jhash.h"
 
+/* Where the time goes.  Set STOP_AFTER to a stage and the program drops the
+ * packet there, so what a stage costs is the difference between its dispatch
+ * time and the one before it.  Everything past the stop is unreachable and the
+ * compiler removes it, so what runs really is only what is named.
+ *
+ * 0 leaves the program whole.  Read the cost off completion.avg_ns in
+ * knod/bpf/stats, and read backlogs_avg with it - a stage is only comparable
+ * to its neighbour if both dispatches carried about the same number of packets.
+ */
+#define STOP_AFTER		0
+
+#define STOP_ENTRY		1	/* nothing but prologue and epilogue */
+#define STOP_ETH		2	/* + ethernet header */
+#define STOP_TOTAL		3	/* + the global counter */
+#define STOP_L3			4	/* + IP header */
+#define STOP_L4			5	/* + TCP/UDP ports */
+#define STOP_VIP		6	/* + vip_map lookup */
+#define STOP_VIP_STATS		7	/* + per-VIP counter */
+#define STOP_CACHE		8	/* + connection table lookup */
+#define STOP_DST		9	/* + ch_rings and reals */
+#define STOP_REAL_STATS		10	/* + per-real counter */
+#define STOP_CTL		11	/* + ctl_array lookup */
+
+#define STOP(stage)						\
+	do {							\
+		if (STOP_AFTER == (stage))			\
+			return XDP_DROP;			\
+	} while (0)
+
 __attribute__((__always_inline__))
 static inline void increment_stats(int offset, struct lb_stats *delta)
 {
@@ -78,8 +107,10 @@ static inline int get_packet_dst(struct real_definition **real,
 	    connection_table_lookup(&dst_entry, pckt, is_syn)) {
 		*real = bpf_map_lookup_elem(&reals, &dst_entry->pos);
 		if (*real)
-			return 0;
+			return STOP_AFTER == STOP_CACHE ? -1 : 0;
 	}
+	if (STOP_AFTER == STOP_CACHE)
+		return -1;
 
 	miss_delta.v1 += 1;
 	increment_stats(CACHE_MISS_CNTR, &miss_delta);
@@ -130,6 +161,7 @@ static inline int process_packet(void *data, __u64 pkt_off,
 	ret = parse_l3_headers(&pckt, &protocol, &pkt_bytes, data, data_end);
 	if (ret != FURTHER_PROCESSING)
 		return ret;
+	STOP(STOP_L3);
 
 	if (protocol == IPPROTO_TCP) {
 		if (!parse_tcp(data, data_end, &pckt))
@@ -140,6 +172,7 @@ static inline int process_packet(void *data, __u64 pkt_off,
 	} else {
 		return XDP_PASS;
 	}
+	STOP(STOP_L4);
 
 	vip.vip = pckt.flow.dst;
 	vip.port = pckt.flow.port16[1];
@@ -152,6 +185,7 @@ static inline int process_packet(void *data, __u64 pkt_off,
 		if (!vip_info)
 			return XDP_PASS;
 	}
+	STOP(STOP_VIP);
 
 	pkt_delta.v1 += 1;
 	pkt_delta.v2 += pkt_bytes;
@@ -161,6 +195,7 @@ static inline int process_packet(void *data, __u64 pkt_off,
 		per_vip->v1 += pkt_delta.v1;
 		per_vip->v2 += pkt_delta.v2;
 	}
+	STOP(STOP_VIP_STATS);
 
 	if (vip_info->flags & F_HASH_NO_SRC_PORT)
 		pckt.flow.port16[0] = 0;
@@ -176,17 +211,20 @@ static inline int process_packet(void *data, __u64 pkt_off,
 		return XDP_DROP;
 	if (!dst)
 		return XDP_DROP;
+	STOP(STOP_DST);
 
 	per_real = bpf_map_lookup_elem(&reals_stats, &pckt.real_index);
 	if (per_real) {
 		per_real->v1 += 1;
 		per_real->v2 += pkt_bytes;
 	}
+	STOP(STOP_REAL_STATS);
 
 	cval = bpf_map_lookup_elem(&ctl_array,
 				   &((__u32){ CTL_MAC_INDEX }));
 	if (!cval)
 		return XDP_DROP;
+	STOP(STOP_CTL);
 
 	if (!encap_v4(xdp, cval, &pckt, dst, pkt_bytes)) {
 		struct lb_stats encap_delta = { .v1 = 1 };
@@ -208,6 +246,8 @@ int balancer_ingress(struct xdp_md *ctx)
 	void *data;
 	int action;
 
+	STOP(STOP_ENTRY);
+
 	data = (void *)(long)ctx->data;
 	data_end = (void *)(long)ctx->data_end;
 
@@ -216,10 +256,12 @@ int balancer_ingress(struct xdp_md *ctx)
 		return XDP_DROP;
 	if (eth->h_proto != BE_ETH_P_IP)
 		return XDP_PASS;
+	STOP(STOP_ETH);
 
 	total_delta.v1 += 1;
 	total_delta.v2 += data_end - data;
 	increment_stats(XDP_TOTAL_CNTR, &total_delta);
+	STOP(STOP_TOTAL);
 
 	action = process_packet(data, sizeof(struct ethhdr), data_end, ctx);
 
