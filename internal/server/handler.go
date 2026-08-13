@@ -4,6 +4,7 @@ package server
 import (
 	"net"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -178,7 +179,13 @@ func (h *handler) getStats(c *gin.Context) {
 }
 
 func (h *handler) getConnCache(c *gin.Context) {
-	info, err := h.mgr.ConnCacheInfo()
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "0"))
+	if err != nil || limit < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
+		return
+	}
+
+	info, err := h.mgr.ConnCacheInfo(limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -364,23 +365,70 @@ func (m *Manager) GetStats(vip model.VIP) (*model.StatsEntry, error) {
 	}, nil
 }
 
+func protoName(proto uint8) string {
+	switch proto {
+	case 6:
+		return "tcp"
+	case 17:
+		return "udp"
+	default:
+		return fmt.Sprintf("%d", proto)
+	}
+}
+
+// The address a real index stands for, or the index itself when it stands for
+// nothing - a connection table entry outlives the real it was pinned to.
+func (m *Manager) realName(pos uint32) string {
+	var rd balancerRealDefinition
+
+	if err := m.objs.Reals.Lookup(&pos, &rd); err != nil || rd.Dst == 0 {
+		return fmt.Sprintf("#%d", pos)
+	}
+
+	addr := make([]byte, 4)
+	binary.NativeEndian.PutUint32(addr, rd.Dst)
+
+	return net.IP(addr).String()
+}
+
+/* The key is read as bytes rather than through the generated struct.  The
+ * ports sit in a union there, which is awkward to name from Go, and both the
+ * addresses and the ports are already in the order they are printed in.
+ */
+func flowFromKey(key []byte, atime uint64, name string) model.ConnCacheEntry {
+	srcPort := strconv.Itoa(int(binary.BigEndian.Uint16(key[8:10])))
+	dstPort := strconv.Itoa(int(binary.BigEndian.Uint16(key[10:12])))
+
+	return model.ConnCacheEntry{
+		Src:   net.JoinHostPort(net.IP(key[0:4]).String(), srcPort),
+		Dst:   net.JoinHostPort(net.IP(key[4:8]).String(), dstPort),
+		Proto: protoName(key[12]),
+		Real:  name,
+		Atime: atime,
+	}
+}
+
 // A flow only stays in the connection table while it is being used, so what is
 // in there says as much about the traffic as about the table.  A count far
-// below the number of flows offered means entries are not landing; the ages say
-// whether they are being aged out instead.
-func (m *Manager) ConnCacheInfo() (*model.ConnCacheInfo, error) {
+// below the number of flows offered means entries are not landing; the spread
+// in atime says whether they are being aged out instead.
+//
+// limit caps how many flows are listed; zero lists all of them.  The counts
+// cover the whole table either way.
+func (m *Manager) ConnCacheInfo(limit int) (*model.ConnCacheInfo, error) {
 	var val balancerRealPosLru
-	var key balancerFlowKey
+	var oldest, newest uint64
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	info := &model.ConnCacheInfo{
 		Capacity: m.objs.ConnCache.MaxEntries(),
-		ByReal:   make(map[uint32]int),
+		ByReal:   make(map[string]int),
 	}
 
-	var oldest, newest uint64
+	key := make([]byte, m.objs.ConnCache.KeySize())
+	names := make(map[uint32]string)
 
 	it := m.objs.ConnCache.Iterate()
 	for it.Next(&key, &val) {
@@ -390,8 +438,23 @@ func (m *Manager) ConnCacheInfo() (*model.ConnCacheInfo, error) {
 		if val.Atime > newest {
 			newest = val.Atime
 		}
-		info.ByReal[val.Pos]++
 		info.Entries++
+
+		name, seen := names[val.Pos]
+		if !seen {
+			name = m.realName(val.Pos)
+			names[val.Pos] = name
+		}
+		info.ByReal[name]++
+
+		if len(key) < 13 {
+			continue
+		}
+		if limit > 0 && len(info.Flows) >= limit {
+			info.Truncated = true
+			continue
+		}
+		info.Flows = append(info.Flows, flowFromKey(key, val.Atime, name))
 	}
 	if err := it.Err(); err != nil {
 		return nil, err
