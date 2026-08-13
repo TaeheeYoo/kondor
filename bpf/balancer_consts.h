@@ -16,7 +16,11 @@
 #define CTL_MAP_SIZE         16
 #define CH_RINGS_SIZE        (MAX_VIPS * RING_SIZE)
 #define STATS_MAP_SIZE       (MAX_VIPS * 2)
-#define DEFAULT_CACHE_SIZE   1000000
+/* Rounded up to a power of two and used as the bucket count, so this is
+ * what a lookup scatters over: 16k buckets is a 64kB array a cache can
+ * hold, where a million is 4MB and every lookup is a trip to memory.
+ */
+#define DEFAULT_CACHE_SIZE   16384
 
 /* VIP flags */
 #define F_HASH_NO_SRC_PORT   (1 << 0)
