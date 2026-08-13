@@ -40,7 +40,7 @@ struct vip_meta {
 	__u32 vip_num;
 };
 
-struct real_pos_lru {
+struct conn_cache_entry {
 	__u32 pos;
 };
 

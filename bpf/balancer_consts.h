@@ -2,13 +2,13 @@
 #ifndef __BALANCER_CONSTS_H
 #define __BALANCER_CONSTS_H
 
-#define BE_ETH_P_IP   8       /* htons(ETH_P_IP) */
-#define BE_ETH_P_IPV6 56710   /* htons(ETH_P_IPV6) */
+#define BE_ETH_P_IP          8       /* htons(ETH_P_IP) */
+#define BE_ETH_P_IPV6        56710   /* htons(ETH_P_IPV6) */
 
-#define FURTHER_PROCESSING  (-1)
-#define PCKT_FRAGMENTED     65343  /* htons(IP_MF | IP_OFFSET) */
+#define FURTHER_PROCESSING   (-1)
+#define PCKT_FRAGMENTED      65343  /* htons(IP_MF | IP_OFFSET) */
 
-#define IPV4_HDR_LEN_NO_OPT 20
+#define IPV4_HDR_LEN_NO_OPT  20
 
 #define RING_SIZE            65537
 #define MAX_VIPS             512
@@ -16,11 +16,11 @@
 #define CTL_MAP_SIZE         16
 #define CH_RINGS_SIZE        (MAX_VIPS * RING_SIZE)
 #define STATS_MAP_SIZE       (MAX_VIPS * 2)
-#define DEFAULT_LRU_SIZE     1000000
+#define DEFAULT_CACHE_SIZE   1000000
 
 /* VIP flags */
 #define F_HASH_NO_SRC_PORT   (1 << 0)
-#define F_LRU_BYPASS         (1 << 1)
+#define F_CACHE_BYPASS       (1 << 1)
 #define F_HASH_DPORT_ONLY    (1 << 3)
 #define NO_FLAGS             0
 
@@ -37,10 +37,10 @@
 #define INIT_JHASH_SEED_V6   MAX_VIPS
 
 /* Stats map offsets (stats[MAX_VIPS + X]) */
-#define LRU_CNTRS            0
-#define LRU_MISS_CNTR        1
+#define CACHE_CNTRS          0
+#define CACHE_MISS_CNTR      1
 #define NEW_CONN_RATE_CNTR   2
-#define FALLBACK_LRU_CNTR    3
+#define FALLBACK_CACHE_CNTR  3
 #define ENCAP_FAIL_CNTR      7
 #define CH_DROP_STATS        9
 #define XDP_TOTAL_CNTR       16
