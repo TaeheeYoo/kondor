@@ -34,6 +34,7 @@ func main() {
 	root.AddCommand(vipCmd())
 	root.AddCommand(realCmd())
 	root.AddCommand(statsCmd())
+	root.AddCommand(cacheCmd())
 	root.AddCommand(flushCmd())
 
 	if err := root.Execute(); err != nil {
@@ -256,6 +257,16 @@ func statsCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&all, "all", false, "Show global stats")
 
 	return cmd
+}
+
+func cacheCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "cache",
+		Short: "Show what the connection table is holding",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return apiGet("/api/v1/conncache")
+		},
+	}
 }
 
 func flushCmd() *cobra.Command {

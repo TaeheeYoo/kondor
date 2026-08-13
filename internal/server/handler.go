@@ -177,6 +177,15 @@ func (h *handler) getStats(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
+func (h *handler) getConnCache(c *gin.Context) {
+	info, err := h.mgr.ConnCacheInfo()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, info)
+}
+
 func (h *handler) getGlobalStats(c *gin.Context) {
 	c.JSON(http.StatusOK, h.mgr.GetGlobalStats())
 }

@@ -25,6 +25,7 @@ func New(mgr *lb.Manager) *gin.Engine {
 
 		api.GET("/stats", h.getStats)
 		api.GET("/stats/global", h.getGlobalStats)
+		api.GET("/conncache", h.getConnCache)
 	}
 
 	return r

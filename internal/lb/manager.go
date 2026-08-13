@@ -364,6 +364,48 @@ func (m *Manager) GetStats(vip model.VIP) (*model.StatsEntry, error) {
 	}, nil
 }
 
+// A flow only stays in the connection table while it is being used, so what is
+// in there says as much about the traffic as about the table.  A count far
+// below the number of flows offered means entries are not landing; the ages say
+// whether they are being aged out instead.
+func (m *Manager) ConnCacheInfo() (*model.ConnCacheInfo, error) {
+	var val balancerRealPosLru
+	var key balancerFlowKey
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	info := &model.ConnCacheInfo{
+		Capacity: m.objs.ConnCache.MaxEntries(),
+		ByReal:   make(map[uint32]int),
+	}
+
+	var oldest, newest uint64
+
+	it := m.objs.ConnCache.Iterate()
+	for it.Next(&key, &val) {
+		if info.Entries == 0 || val.Atime < oldest {
+			oldest = val.Atime
+		}
+		if val.Atime > newest {
+			newest = val.Atime
+		}
+		info.ByReal[val.Pos]++
+		info.Entries++
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+
+	/* atime comes from the GPU's snapshot of ktime, so the spread between
+	 * the two ends is reported rather than an age against a host clock that
+	 * reads differently.
+	 */
+	info.Spread = newest - oldest
+
+	return info, nil
+}
+
 func (m *Manager) GetGlobalStats() map[string]model.StatsEntry {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
