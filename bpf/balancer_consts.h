@@ -51,8 +51,6 @@
 #define XDP_DROP_CNTR        18
 #define XDP_PASS_CNTR        19
 
-#define MAX_CONN_RATE        125000
-
 #define CTL_MAC_INDEX        0
 
 #define PCKT_ENCAP_V4        encap_v4

@@ -109,10 +109,10 @@ static inline int get_packet_dst(struct real_definition **real,
 	if (!(vip_info->flags & F_LRU_BYPASS) && !is_syn) {
 		conn_rate = bpf_map_lookup_elem(&stats,
 						&((__u32){ MAX_VIPS + NEW_CONN_RATE_CNTR }));
-		if (conn_rate && conn_rate->v1 < MAX_CONN_RATE) {
+		if (conn_rate)
 			conn_rate->v1 += 1;
-			connection_table_insert(pckt, *real_pos);
-		}
+
+		connection_table_insert(pckt, *real_pos);
 	}
 
 	return 0;
