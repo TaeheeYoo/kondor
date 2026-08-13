@@ -35,20 +35,20 @@ static inline __u32 get_packet_hash(struct packet_description *pckt)
 }
 
 __attribute__((__always_inline__))
-static inline bool connection_table_lookup(struct real_pos_lru **dst,
+static inline bool connection_table_lookup(struct conn_cache_entry **dst,
 					   struct packet_description *pckt,
 					   bool is_syn)
 {
-	struct real_pos_lru *pos_lru;
+	struct conn_cache_entry *entry;
 
 	if (is_syn)
 		return false;
 
-	pos_lru = bpf_map_lookup_elem(&conn_cache, &pckt->flow);
-	if (!pos_lru)
+	entry = bpf_map_lookup_elem(&conn_cache, &pckt->flow);
+	if (!entry)
 		return false;
 
-	*dst = pos_lru;
+	*dst = entry;
 	return true;
 }
 
@@ -56,7 +56,7 @@ __attribute__((__always_inline__))
 static inline void connection_table_insert(struct packet_description *pckt,
 					   __u32 pos)
 {
-	struct real_pos_lru new_entry = {};
+	struct conn_cache_entry new_entry = {};
 
 	new_entry.pos = pos;
 
@@ -69,20 +69,20 @@ static inline int get_packet_dst(struct real_definition **real,
 				 struct vip_meta *vip_info,
 				 bool is_syn)
 {
+	struct conn_cache_entry *dst_entry;
+	struct lb_stats miss_delta = {};
 	struct lb_stats *conn_rate;
-	struct real_pos_lru *dst_lru;
-	struct lb_stats lru_delta = {};
 	__u32 hash, key, *real_pos;
 
-	if (!(vip_info->flags & F_LRU_BYPASS) &&
-	    connection_table_lookup(&dst_lru, pckt, is_syn)) {
-		*real = bpf_map_lookup_elem(&reals, &dst_lru->pos);
+	if (!(vip_info->flags & F_CACHE_BYPASS) &&
+	    connection_table_lookup(&dst_entry, pckt, is_syn)) {
+		*real = bpf_map_lookup_elem(&reals, &dst_entry->pos);
 		if (*real)
 			return 0;
 	}
 
-	lru_delta.v1 += 1;
-	increment_stats(LRU_MISS_CNTR, &lru_delta);
+	miss_delta.v1 += 1;
+	increment_stats(CACHE_MISS_CNTR, &miss_delta);
 
 	hash = get_packet_hash(pckt) % RING_SIZE;
 	key = RING_SIZE * vip_info->vip_num + hash;
@@ -97,7 +97,7 @@ static inline int get_packet_dst(struct real_definition **real,
 	if (!*real)
 		return -1;
 
-	if (!(vip_info->flags & F_LRU_BYPASS) && !is_syn) {
+	if (!(vip_info->flags & F_CACHE_BYPASS) && !is_syn) {
 		conn_rate = bpf_map_lookup_elem(&stats,
 						&((__u32){ MAX_VIPS + NEW_CONN_RATE_CNTR }));
 		if (conn_rate)

@@ -17,9 +17,9 @@ struct {
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, DEFAULT_LRU_SIZE);
+	__uint(max_entries, DEFAULT_CACHE_SIZE);
 	__type(key, struct flow_key);
-	__type(value, struct real_pos_lru);
+	__type(value, struct conn_cache_entry);
 } conn_cache SEC(".maps");
 
 struct {
