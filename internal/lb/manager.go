@@ -415,7 +415,7 @@ func flowFromKey(key []byte, name string) model.ConnCacheEntry {
 // limit caps how many flows are listed; zero lists all of them.  The counts
 // cover the whole table either way.
 func (m *Manager) ConnCacheInfo(limit int) (*model.ConnCacheInfo, error) {
-	var val balancerRealPosLru
+	var val balancerConnCacheEntry
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -462,7 +462,7 @@ func (m *Manager) GetGlobalStats() map[string]model.StatsEntry {
 	result := make(map[string]model.StatsEntry)
 	names := map[int]string{
 		16: "total", 17: "tx", 18: "drop", 19: "pass",
-		1: "lru_miss", 7: "encap_fail",
+		1: "cache_miss", 7: "encap_fail",
 	}
 
 	for offset, name := range names {

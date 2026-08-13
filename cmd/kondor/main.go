@@ -98,7 +98,7 @@ func serveCmd() *cobra.Command {
 /* Mirrors the F_* flags the balancer reads out of vip_meta. */
 const (
 	flagHashNoSrcPort = 1 << 0
-	flagLRUBypass     = 1 << 1
+	flagCacheBypass   = 1 << 1
 	flagHashDportOnly = 1 << 3
 )
 
@@ -108,7 +108,7 @@ func vipCmd() *cobra.Command {
 		Short: "Manage VIPs",
 	}
 
-	var lruBypass bool
+	var cacheBypass bool
 	var hashNoSrcPort bool
 	var hashDportOnly bool
 
@@ -123,8 +123,8 @@ func vipCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if lruBypass {
-				flags |= flagLRUBypass
+			if cacheBypass {
+				flags |= flagCacheBypass
 			}
 			if hashNoSrcPort {
 				flags |= flagHashNoSrcPort
@@ -142,7 +142,7 @@ func vipCmd() *cobra.Command {
 		},
 	}
 
-	addCmd.Flags().BoolVar(&lruBypass, "lru-bypass", false,
+	addCmd.Flags().BoolVar(&cacheBypass, "cache-bypass", false,
 		"Do not keep a connection table for this VIP")
 	addCmd.Flags().BoolVar(&hashNoSrcPort, "hash-no-src-port", false,
 		"Leave the source port out of the hash")
