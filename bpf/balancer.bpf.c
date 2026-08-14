@@ -117,8 +117,15 @@ static inline int get_packet_dst(struct real_definition **real,
 	if (!(vip_info->flags & F_CACHE_BYPASS) &&
 	    connection_table_lookup(&dst_entry, pckt, is_syn)) {
 		*real = bpf_map_lookup_elem(&reals, &dst_entry->pos);
-		if (*real)
+		if (*real) {
+			/* Which real this went to, for the counter below.  The
+			 * path that picks one afresh sets it and this one did
+			 * not, so every packet the table answered was counted
+			 * against real zero - nearly all of them.
+			 */
+			pckt->real_index = dst_entry->pos;
 			return STOP_AFTER == STOP_CACHE ? -1 : 0;
+		}
 	}
 	if (STOP_AFTER == STOP_CACHE)
 		return -1;
