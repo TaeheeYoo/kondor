@@ -26,6 +26,17 @@
  */
 #define STOP_AFTER		0
 
+/* Narrow the per-real key to this many bits' worth of distinct values, or leave
+ * it 0 to use the key as it comes.  See where it is applied for what it is for.
+ * The per-real counts are meaningless while it is set.
+ *
+ *	1    two keys,  one line
+ *	3    four,      one line
+ *	15   sixteen,   four lines   - what the per-VIP counter has
+ *	63   sixty-four, sixteen lines
+ */
+#define REAL_KEY_MASK		0
+
 #define STOP_ENTRY		1	/* nothing but prologue and epilogue */
 #define STOP_ETH		2	/* + ethernet header */
 #define STOP_TOTAL		3	/* + the global counter */
@@ -154,6 +165,7 @@ static inline int process_packet(void *data, __u64 pkt_off,
 	struct ctl_value *cval;
 	__u16 pkt_bytes = 0;
 	__u8 protocol = 0;
+	__u32 real_key;
 	__u32 vip_num;
 	bool is_syn;
 	int ret;
@@ -213,7 +225,22 @@ static inline int process_packet(void *data, __u64 pkt_off,
 		return XDP_DROP;
 	STOP(STOP_DST);
 
-	per_real = bpf_map_lookup_elem(&reals_stats, &pckt.real_index);
+	/* Under offload the per-real counter costs several times what the
+	 * per-VIP one does, for the same three lines against the same kind of
+	 * map.  The one thing that differs is how far the keys are spread: a
+	 * wave lands on sixteen VIPs and on as many reals as it has lanes.
+	 *
+	 * Narrowing the key here says which of those matters - how many
+	 * addresses a wave touches, or how many cache lines they fall in.  With
+	 * a 16-byte value four keys share a line, so 3 gives four addresses in
+	 * one line and 15 gives sixteen in four, which is what the per-VIP
+	 * counter has.  The counts are wrong while this is set; it is for
+	 * finding out where the time goes and nothing else.
+	 */
+	real_key = pckt.real_index;
+	if (REAL_KEY_MASK)
+		real_key &= REAL_KEY_MASK;
+	per_real = bpf_map_lookup_elem(&reals_stats, &real_key);
 	if (per_real) {
 		per_real->v1 += 1;
 		per_real->v2 += pkt_bytes;
