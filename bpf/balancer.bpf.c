@@ -77,8 +77,10 @@ static inline int get_packet_dst(struct real_definition **real,
 	if (!(vip_info->flags & F_CACHE_BYPASS) &&
 	    connection_table_lookup(&dst_entry, pckt, is_syn)) {
 		*real = bpf_map_lookup_elem(&reals, &dst_entry->pos);
-		if (*real)
+		if (*real) {
+			pckt->real_index = dst_entry->pos;
 			return 0;
+		}
 	}
 
 	miss_delta.v1 += 1;
