@@ -15,6 +15,40 @@
 #include "pckt_encap.h"
 #include "jhash.h"
 
+/* Where the program stops, for finding what caps GPU throughput.  Each rung
+ * leaves one more stage in, so the difference between two runs is the price of
+ * the stage between them.  Every rung returns XDP_TX, so the host path costs
+ * the same in all of them and only the shader's work changes.
+ *
+ *   0 nothing at all      1 the ethernet check    2 the two stat counters
+ *   3 parse L3/L4         4 vip_map               5 per-vip stats
+ *   6 get_packet_dst      7 per-real + ctl_array  8 encap - the whole balancer
+ *
+ * A compile-time constant, so everything past the cut is dead and is not
+ * emitted at all: the point is for the work not to happen, not to be jumped
+ * over.
+ */
+#ifndef LADDER
+#define LADDER 8
+#endif
+#define LADDER_CUT(n)	do { if (LADDER < (n)) return XDP_TX; } while (0)
+
+/* Where process_packet() stops, for finding what caps GPU throughput.  Each
+ * rung leaves one more stage in, so the difference between two runs is the
+ * price of the stage between them.  Every rung returns XDP_TX, so the host
+ * path costs the same in all of them and only the shader's work changes.
+ *
+ *   0 verdict only   1 parse   2 vip_map   3 per-vip stats
+ *   4 get_packet_dst 5 per-real + ctl_array   6 encap (the whole balancer)
+ *
+ * A compile-time constant, so everything past the cut is dead and is not
+ * emitted at all - the point is to not run it, not to skip over it.
+ */
+#ifndef LADDER
+#define LADDER 6
+#endif
+#define LADDER_CUT(n)	do { if (LADDER < (n)) return XDP_TX; } while (0)
+
 __attribute__((__always_inline__))
 static inline void increment_stats(int offset, struct lb_stats *delta)
 {
@@ -129,6 +163,8 @@ static inline int process_packet(void *data, __u64 pkt_off,
 	bool is_syn;
 	int ret;
 
+	LADDER_CUT(1);
+
 	ret = parse_l3_headers(&pckt, &protocol, &pkt_bytes, data, data_end);
 	if (ret != FURTHER_PROCESSING)
 		return ret;
@@ -142,6 +178,10 @@ static inline int process_packet(void *data, __u64 pkt_off,
 	} else {
 		return XDP_PASS;
 	}
+
+	LADDER_CUT(2);
+
+	LADDER_CUT(4);
 
 	vip.vip = pckt.flow.dst;
 	vip.port = pckt.flow.port16[1];
@@ -157,6 +197,10 @@ static inline int process_packet(void *data, __u64 pkt_off,
 
 	pkt_delta.v1 += 1;
 	pkt_delta.v2 += pkt_bytes;
+	LADDER_CUT(3);
+
+	LADDER_CUT(5);
+
 	vip_num = vip_info->vip_num;
 	per_vip = bpf_map_lookup_elem(&stats, &vip_num);
 	if (per_vip) {
@@ -172,12 +216,20 @@ static inline int process_packet(void *data, __u64 pkt_off,
 		pckt.flow.src = 0;
 	}
 
+	LADDER_CUT(4);
+
+	LADDER_CUT(6);
+
 	is_syn = pckt.flags & F_SYN_SET;
 
 	if (get_packet_dst(&dst, &pckt, vip_info, is_syn))
 		return XDP_DROP;
 	if (!dst)
 		return XDP_DROP;
+
+	LADDER_CUT(5);
+
+	LADDER_CUT(7);
 
 	per_real = bpf_map_lookup_elem(&reals_stats, &pckt.real_index);
 	if (per_real) {
@@ -189,6 +241,10 @@ static inline int process_packet(void *data, __u64 pkt_off,
 				   &((__u32){ CTL_MAC_INDEX }));
 	if (!cval)
 		return XDP_DROP;
+
+	LADDER_CUT(6);
+
+	LADDER_CUT(8);
 
 	if (!encap_v4(xdp, cval, &pckt, dst, pkt_bytes)) {
 		struct lb_stats encap_delta = { .v1 = 1 };
@@ -213,17 +269,27 @@ int balancer_ingress(struct xdp_md *ctx)
 	data = (void *)(long)ctx->data;
 	data_end = (void *)(long)ctx->data_end;
 
+	LADDER_CUT(1);
+
 	eth = data;
 	if ((void *)(eth + 1) > data_end)
 		return XDP_DROP;
 	if (eth->h_proto != BE_ETH_P_IP)
 		return XDP_PASS;
 
+	LADDER_CUT(2);
+
 	total_delta.v1 += 1;
 	total_delta.v2 += data_end - data;
 	increment_stats(XDP_TOTAL_CNTR, &total_delta);
 
-	action = process_packet(data, sizeof(struct ethhdr), data_end, ctx);
+	/* Rung two is both counters and no parsing, so the walk into
+	 * process_packet() is what rung three adds.
+	 */
+	action = XDP_TX;
+	if (LADDER >= 3)
+		action = process_packet(data, sizeof(struct ethhdr),
+					data_end, ctx);
 
 	/* No byte count here: process_packet() may have moved the head, which
 	 * leaves data and data_end behind.
