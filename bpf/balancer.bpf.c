@@ -67,9 +67,12 @@
 #endif
 
 #if GATE
+/* One entry is used and eight are asked for: the offload hands out one fewer
+ * than it is told, so a map of one holds nothing.
+ */
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1);
+	__uint(max_entries, 8);
 	__type(key, __u32);
 	__type(value, __u32);
 } gate_map SEC(".maps");
