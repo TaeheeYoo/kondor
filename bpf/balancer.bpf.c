@@ -49,6 +49,43 @@
 #endif
 #define LADDER_CUT(n)	do { if (LADDER < (n)) return XDP_TX; } while (0)
 
+/* Does what the host last wrote reach the shader?
+ *
+ * A map the GPU reads is cached now, so a value the host writes has to travel
+ * to be seen: the write goes to memory, and the acquire the next dispatch
+ * takes is what lets the shader look at it rather than at whatever it had.
+ * Flipping this between zero and one from outside and watching the traffic
+ * stop and start is the whole of the check.
+ *
+ * Zero unless asked for, because it is a map lookup on every packet and this
+ * program is also what throughput is measured with.  Set it here, the way
+ * LADDER is set.  A missing entry carries on, so arming the build and not
+ * populating the map changes nothing.
+ */
+#ifndef GATE
+#define GATE 0
+#endif
+
+#if GATE
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, __u32);
+} gate_map SEC(".maps");
+
+#define GATE_CHECK()							\
+	do {								\
+		__u32 __gkey = 0;					\
+		__u32 *__gate = bpf_map_lookup_elem(&gate_map, &__gkey);\
+									\
+		if (__gate && !*__gate)					\
+			return XDP_DROP;				\
+	} while (0)
+#else
+#define GATE_CHECK()	do { } while (0)
+#endif
+
 __attribute__((__always_inline__))
 static inline void increment_stats(int offset, struct lb_stats *delta)
 {
@@ -282,6 +319,11 @@ int balancer_ingress(struct xdp_md *ctx)
 	total_delta.v1 += 1;
 	total_delta.v2 += data_end - data;
 	increment_stats(XDP_TOTAL_CNTR, &total_delta);
+
+	/* Past the parse and the counters, where the balancer's own lookups
+	 * are, so the gate sits on the path it is asking about.
+	 */
+	GATE_CHECK();
 
 	/* Rung two is both counters and no parsing, so the walk into
 	 * process_packet() is what rung three adds.
