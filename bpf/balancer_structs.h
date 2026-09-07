@@ -49,9 +49,14 @@ struct real_definition {
 	__u8 flags;
 };
 
+/* 32 bits, not 64: the GPU offload has no 64-bit atomic on GFX9, and a
+ * counter it cannot add to atomically it cannot offload at all.  The host
+ * widens on read.  At 45 Mpps a packet count wraps in about 95 seconds, so
+ * anything that accumulates these has to look more often than that.
+ */
 struct lb_stats {
-	__u64 v1;
-	__u64 v2;
+	__u32 v1;
+	__u32 v2;
 };
 
 struct eth_hdr {

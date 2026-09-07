@@ -356,8 +356,8 @@ func (m *Manager) GetStats(vip model.VIP) (*model.StatsEntry, error) {
 
 	var packets, bytes uint64
 	for i := range perCPU {
-		packets += perCPU[i].V1
-		bytes += perCPU[i].V2
+		packets += uint64(perCPU[i].V1)
+		bytes += uint64(perCPU[i].V2)
 	}
 	return &model.StatsEntry{
 		Packets: packets,
@@ -476,8 +476,8 @@ func (m *Manager) GetGlobalStats() map[string]model.StatsEntry {
 		// there to read.
 		var e model.StatsEntry
 		for i := range perCPU {
-			e.Packets += perCPU[i].V1
-			e.Bytes += perCPU[i].V2
+			e.Packets += uint64(perCPU[i].V1)
+			e.Bytes += uint64(perCPU[i].V2)
 		}
 		result[name] = e
 	}
