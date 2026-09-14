@@ -60,6 +60,7 @@ func (m *Manager) attachOffload(ifName string, ifIndex int) error {
 		{"stats", &objs.Stats},
 		{"ctl_array", &objs.CtlArray},
 		{"conn_cache", &objs.ConnCache},
+		{"conn_stats", &objs.ConnStats},
 	}
 	for _, me := range maps {
 		*me.dest, err = ebpf.LoadPinnedMap(

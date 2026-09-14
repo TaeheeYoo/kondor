@@ -359,6 +359,7 @@ func (m *Manager) GetStats(vip model.VIP) (*model.StatsEntry, error) {
 		packets += perCPU[i].V1
 		bytes += perCPU[i].V2
 	}
+
 	return &model.StatsEntry{
 		Packets: packets,
 		Bytes:   bytes,
@@ -415,7 +416,7 @@ func flowFromKey(key []byte, name string) model.ConnCacheEntry {
 // limit caps how many flows are listed; zero lists all of them.  The counts
 // cover the whole table either way.
 func (m *Manager) ConnCacheInfo(limit int) (*model.ConnCacheInfo, error) {
-	var val balancerConnCacheEntry
+	var val []balancerConnCacheEntry
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -432,10 +433,21 @@ func (m *Manager) ConnCacheInfo(limit int) (*model.ConnCacheInfo, error) {
 	for it.Next(&key, &val) {
 		info.Entries++
 
-		name, seen := names[val.Pos]
+		/* The value is per-cpu now.  A flow is RSS-pinned to one queue,
+		 * so the real it went to is in that instance's slot and the rest
+		 * are zero; the max reads it back without knowing which slot.
+		 */
+		var pos uint32
+		for i := range val {
+			if val[i].Pos > pos {
+				pos = val[i].Pos
+			}
+		}
+
+		name, seen := names[pos]
 		if !seen {
-			name = m.realName(val.Pos)
-			names[val.Pos] = name
+			name = m.realName(pos)
+			names[pos] = name
 		}
 		info.ByReal[name]++
 
@@ -446,13 +458,34 @@ func (m *Manager) ConnCacheInfo(limit int) (*model.ConnCacheInfo, error) {
 			info.Truncated = true
 			continue
 		}
-		info.Flows = append(info.Flows, flowFromKey(key, name))
+
+		entry := flowFromKey(key, name)
+		entry.Packets, entry.Bytes = m.connStatsSum(key)
+		info.Flows = append(info.Flows, entry)
 	}
 	if err := it.Err(); err != nil {
 		return nil, err
 	}
 
 	return info, nil
+}
+
+// The per-flow packet and byte counts, summed over the per-cpu slots the way a
+// percpu counter is read back.
+func (m *Manager) connStatsSum(key []byte) (uint64, uint64) {
+	var perCPU []balancerLbStats
+
+	if err := m.objs.ConnStats.Lookup(key, &perCPU); err != nil {
+		return 0, 0
+	}
+
+	var packets, bytes uint64
+	for i := range perCPU {
+		packets += perCPU[i].V1
+		bytes += perCPU[i].V2
+	}
+
+	return packets, bytes
 }
 
 func (m *Manager) GetGlobalStats() map[string]model.StatsEntry {

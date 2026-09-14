@@ -25,12 +25,15 @@ type StatsEntry struct {
 	Bytes   uint64 `json:"bytes"`
 }
 
-// One flow held in the connection table, and the real it was pinned to.
+// One flow held in the connection table, the real it was pinned to, and the
+// per-flow counters summed across the per-cpu slots.
 type ConnCacheEntry struct {
-	Src   string `json:"src"`
-	Dst   string `json:"dst"`
-	Proto string `json:"proto"`
-	Real  string `json:"real"`
+	Src     string `json:"src"`
+	Dst     string `json:"dst"`
+	Proto   string `json:"proto"`
+	Real    string `json:"real"`
+	Packets uint64 `json:"packets"`
+	Bytes   uint64 `json:"bytes"`
 }
 
 // What the connection table holds right now: how many flows are in it, how

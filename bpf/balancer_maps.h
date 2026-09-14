@@ -16,11 +16,22 @@ struct {
 } vip_map SEC(".maps");
 
 struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
 	__uint(max_entries, DEFAULT_CACHE_SIZE);
 	__type(key, struct flow_key);
 	__type(value, struct conn_cache_entry);
 } conn_cache SEC(".maps");
+
+/* Per-flow counters, one instance per queue.  A flow is RSS-pinned to a single
+ * queue, so its packets all land on that instance's slot; summed across cpus on
+ * readback it is the flow's total.
+ */
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+	__uint(max_entries, DEFAULT_CACHE_SIZE);
+	__type(key, struct flow_key);
+	__type(value, struct lb_stats);
+} conn_stats SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
