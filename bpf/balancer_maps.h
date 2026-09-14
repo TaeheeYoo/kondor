@@ -16,11 +16,22 @@ struct {
 } vip_map SEC(".maps");
 
 struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
 	__uint(max_entries, DEFAULT_CACHE_SIZE);
 	__type(key, struct flow_key);
 	__type(value, struct conn_cache_entry);
 } conn_cache SEC(".maps");
+
+/* Per-flow counters, one instance per queue.  A flow is RSS-pinned to a single
+ * queue, so its packets all land on that instance's slot; summed across cpus on
+ * readback it is the flow's total.
+ */
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+	__uint(max_entries, DEFAULT_CACHE_SIZE);
+	__type(key, struct flow_key);
+	__type(value, struct lb_stats);
+} conn_stats SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
@@ -49,18 +60,6 @@ struct {
 	__type(key, __u32);
 	__type(value, struct lb_stats);
 } stats SEC(".maps");
-
-/* A/B test of BPF_MAP_TYPE_PERCPU_HASH: mirrors the per-VIP counter kept in
- * `stats` (keyed by vip_num).  Keys are pre-inserted by userspace because the
- * shader does not offload insert on a percpu hash; the datapath only looks up
- * and adds.  Summed per-cpu it must equal the `stats` per-VIP counter.
- */
-struct {
-	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-	__uint(max_entries, STATS_MAP_SIZE);
-	__type(key, __u32);
-	__type(value, struct lb_stats);
-} stats_hash SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
