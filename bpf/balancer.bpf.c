@@ -164,6 +164,21 @@ static inline int process_packet(void *data, __u64 pkt_off,
 		per_vip->v2 += pkt_delta.v2;
 	}
 
+	/* percpu-hash A/B mirror: same key, same increment.  The key is
+	 * pre-inserted by userspace (the shader does not offload insert on a
+	 * percpu hash), so a miss here means it was not inserted, not a lost
+	 * update.  The += folds to a per-instance atomic in the JIT.
+	 */
+	{
+		struct lb_stats *per_vip_h;
+
+		per_vip_h = bpf_map_lookup_elem(&stats_hash, &vip_num);
+		if (per_vip_h) {
+			per_vip_h->v1 += pkt_delta.v1;
+			per_vip_h->v2 += pkt_delta.v2;
+		}
+	}
+
 	if (vip_info->flags & F_HASH_NO_SRC_PORT)
 		pckt.flow.port16[0] = 0;
 

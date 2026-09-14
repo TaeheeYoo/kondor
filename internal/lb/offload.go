@@ -58,6 +58,7 @@ func (m *Manager) attachOffload(ifName string, ifIndex int) error {
 		{"reals", &objs.Reals},
 		{"reals_stats", &objs.RealsStats},
 		{"stats", &objs.Stats},
+		{"stats_hash", &objs.StatsHash},
 		{"ctl_array", &objs.CtlArray},
 		{"conn_cache", &objs.ConnCache},
 	}

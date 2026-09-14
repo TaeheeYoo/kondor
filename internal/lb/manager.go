@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 
 	"github.com/patchwork-systems/kondor/internal/model"
@@ -181,6 +182,16 @@ func (m *Manager) AddVIP(cfg model.VIPConfig) error {
 
 	if err := m.objs.VipMap.Put(&mapKey, &mapVal); err != nil {
 		return fmt.Errorf("vip_map put: %w", err)
+	}
+
+	/* Pre-insert this VIP's key into the percpu-hash A/B mirror: the shader
+	 * only looks up and adds, it does not insert.  Zero every per-cpu slot.
+	 */
+	if m.objs.StatsHash != nil {
+		zero := make([]balancerLbStats, ebpf.MustPossibleCPU())
+		if err := m.objs.StatsHash.Put(vipNum, zero); err != nil {
+			return fmt.Errorf("stats_hash put: %w", err)
+		}
 	}
 
 	state := &vipState{
@@ -359,6 +370,26 @@ func (m *Manager) GetStats(vip model.VIP) (*model.StatsEntry, error) {
 		packets += perCPU[i].V1
 		bytes += perCPU[i].V2
 	}
+
+	/* A/B check: the percpu-hash mirror summed across cpus must match the
+	 * percpu-array counter for the same VIP.  A mismatch (hash lower) means
+	 * lost updates or a bad instance offset in the percpu-hash path.
+	 */
+	if m.objs.StatsHash != nil {
+		var perCPUh []balancerLbStats
+		if err := m.objs.StatsHash.Lookup(state.vipNum, &perCPUh); err == nil {
+			var hp, hb uint64
+			for i := range perCPUh {
+				hp += perCPUh[i].V1
+				hb += perCPUh[i].V2
+			}
+			if hp != packets || hb != bytes {
+				fmt.Printf("percpu-hash MISMATCH vip=%s: array pkts=%d bytes=%d, hash pkts=%d bytes=%d\n",
+					key, packets, bytes, hp, hb)
+			}
+		}
+	}
+
 	return &model.StatsEntry{
 		Packets: packets,
 		Bytes:   bytes,
