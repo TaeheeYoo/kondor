@@ -134,7 +134,6 @@ static inline int process_packet(void *data, __u64 pkt_off,
 	struct real_definition *dst = NULL;
 	struct lb_stats pkt_delta = {};
 	struct vip_definition vip = {};
-	struct lb_stats *per_real;
 	struct lb_stats *per_vip;
 	struct vip_meta *vip_info;
 	struct ctl_value *cval;
@@ -193,12 +192,6 @@ static inline int process_packet(void *data, __u64 pkt_off,
 		return XDP_DROP;
 	if (!dst)
 		return XDP_DROP;
-
-	per_real = bpf_map_lookup_elem(&reals_stats, &pckt.real_index);
-	if (per_real) {
-		per_real->v1 += 1;
-		per_real->v2 += pkt_bytes;
-	}
 
 	cval = bpf_map_lookup_elem(&ctl_array,
 				   &((__u32){ CTL_MAC_INDEX }));
