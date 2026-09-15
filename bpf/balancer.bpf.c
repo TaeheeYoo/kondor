@@ -194,8 +194,6 @@ static inline int process_packet(void *data, __u64 pkt_off,
 	if (!dst)
 		return XDP_DROP;
 
-	connection_stats_account(&pckt, pkt_bytes);
-
 	per_real = bpf_map_lookup_elem(&reals_stats, &pckt.real_index);
 	if (per_real) {
 		per_real->v1 += 1;
