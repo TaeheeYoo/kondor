@@ -132,14 +132,11 @@ static inline int process_packet(void *data, __u64 pkt_off,
 {
 	struct packet_description pckt = {};
 	struct real_definition *dst = NULL;
-	struct lb_stats pkt_delta = {};
 	struct vip_definition vip = {};
-	struct lb_stats *per_vip;
 	struct vip_meta *vip_info;
 	struct ctl_value *cval;
 	__u16 pkt_bytes = 0;
 	__u8 protocol = 0;
-	__u32 vip_num;
 	bool is_syn;
 	int ret;
 
@@ -167,15 +164,6 @@ static inline int process_packet(void *data, __u64 pkt_off,
 		vip_info = bpf_map_lookup_elem(&vip_map, &vip);
 		if (!vip_info)
 			return XDP_PASS;
-	}
-
-	pkt_delta.v1 += 1;
-	pkt_delta.v2 += pkt_bytes;
-	vip_num = vip_info->vip_num;
-	per_vip = bpf_map_lookup_elem(&stats, &vip_num);
-	if (per_vip) {
-		per_vip->v1 += pkt_delta.v1;
-		per_vip->v2 += pkt_delta.v2;
 	}
 
 	if (vip_info->flags & F_HASH_NO_SRC_PORT)
