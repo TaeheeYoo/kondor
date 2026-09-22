@@ -52,6 +52,21 @@
 #define XDP_DROP_CNTR        18
 #define XDP_PASS_CNTR        19
 
+/* Reason counters.  XDP_TOTAL is taken after the ethertype test and the
+ * verdict counters after process_packet(), so the returns before and inside
+ * those points used to be invisible.  Every return in the program now lands
+ * in exactly one of these.
+ */
+#define L2_SHORT_CNTR        20
+#define L2_NOT_IP_CNTR       21
+#define L3_PARSE_CNTR        22
+#define L4_PARSE_CNTR        23
+#define L4_OTHER_CNTR        24
+#define L4_IPIP_CNTR         25
+#define VIP_MISS_CNTR        26
+#define DST_FAIL_CNTR        27
+#define CTL_MISS_CNTR        28
+
 #define CTL_MAC_INDEX        0
 
 #define PCKT_ENCAP_V4        encap_v4

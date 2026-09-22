@@ -496,6 +496,9 @@ func (m *Manager) GetGlobalStats() map[string]model.StatsEntry {
 	names := map[int]string{
 		16: "total", 17: "tx", 18: "drop", 19: "pass",
 		1: "cache_miss", 7: "encap_fail",
+		20: "l2_short", 21: "l2_not_ip", 22: "l3_parse",
+		23: "l4_parse", 24: "l4_other", 25: "l4_ipip",
+		26: "vip_miss", 27: "dst_fail", 28: "ctl_miss",
 	}
 
 	for offset, name := range names {
@@ -504,9 +507,10 @@ func (m *Manager) GetGlobalStats() map[string]model.StatsEntry {
 		if err := m.objs.Stats.Lookup(key, &perCPU); err != nil {
 			continue
 		}
-		// Only the total counter carries bytes; the rest are counted
-		// after the head may have moved, where the length is no longer
-		// there to read.
+		// Only the total counter carries bytes; the verdict counters
+		// are taken after the head may have moved, where the length is
+		// no longer there to read, and the reason counters carry
+		// whatever identified the case instead.
 		var e model.StatsEntry
 		for i := range perCPU {
 			e.Packets += perCPU[i].V1
