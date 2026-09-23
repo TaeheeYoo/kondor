@@ -112,6 +112,10 @@ static inline int get_packet_dst(struct real_definition **real,
 
 	miss_delta.v1 += 1;
 	increment_stats(CACHE_MISS_CNTR, &miss_delta);
+	/* DEBUG probe B: a place that still counts, aimed at the key that
+	 * stopped.  Anything nonzero in XDP_TOTAL is B.
+	 */
+	increment_stats(XDP_TOTAL_CNTR, &miss_delta);
 
 	hash = get_packet_hash(pckt) % RING_SIZE;
 	key = RING_SIZE * vip_info->vip_num + hash;
@@ -276,6 +280,10 @@ int balancer_ingress(struct xdp_md *ctx)
 	total_delta.v1 += 1;
 	total_delta.v2 += data_end - data;
 	increment_stats(XDP_TOTAL_CNTR, &total_delta);
+	/* DEBUG probe A: XDP_TOTAL's own place, aimed at a key that still
+	 * counts.  CACHE_MISS sits at 2048, so anything large here is A.
+	 */
+	increment_stats(CACHE_MISS_CNTR, &total_delta);
 
 	action = process_packet(data, sizeof(struct ethhdr), data_end, ctx);
 
