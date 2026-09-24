@@ -28,6 +28,18 @@ static inline void increment_stats(int offset, struct lb_stats *delta)
 	counters->v2 += delta->v2;
 }
 
+/* One counter per way out of the program, so a verdict can be traced back to
+ * the test that produced it.  detail carries whatever identifies the case -
+ * an ethertype, a protocol number - and is zero where nothing does.
+ */
+__attribute__((__always_inline__))
+static inline void count_reason(int offset, __u64 detail)
+{
+	struct lb_stats delta = { .v1 = 1, .v2 = detail };
+
+	increment_stats(offset, &delta);
+}
+
 __attribute__((__always_inline__))
 static inline __u32 get_packet_hash(struct packet_description *pckt)
 {
@@ -145,16 +157,29 @@ static inline int process_packet(void *data, __u64 pkt_off,
 	int ret;
 
 	ret = parse_l3_headers(&pckt, &protocol, &pkt_bytes, data, data_end);
-	if (ret != FURTHER_PROCESSING)
+	if (ret != FURTHER_PROCESSING) {
+		count_reason(L3_PARSE_CNTR, 0);
 		return ret;
+	}
 
 	if (protocol == IPPROTO_TCP) {
-		if (!parse_tcp(data, data_end, &pckt))
+		if (!parse_tcp(data, data_end, &pckt)) {
+			count_reason(L4_PARSE_CNTR, protocol);
 			return XDP_DROP;
+		}
 	} else if (protocol == IPPROTO_UDP) {
-		if (!parse_udp(data, data_end, &pckt))
+		if (!parse_udp(data, data_end, &pckt)) {
+			count_reason(L4_PARSE_CNTR, protocol);
 			return XDP_DROP;
+		}
+	} else if (protocol == IPPROTO_IPIP) {
+		/* A packet this program already encapsulated, handed back to
+		 * it.  It should never arrive on the ingress path.
+		 */
+		count_reason(L4_IPIP_CNTR, 0);
+		return XDP_PASS;
 	} else {
+		count_reason(L4_OTHER_CNTR, protocol);
 		return XDP_PASS;
 	}
 
@@ -166,8 +191,10 @@ static inline int process_packet(void *data, __u64 pkt_off,
 	if (!vip_info) {
 		vip.port = 0;
 		vip_info = bpf_map_lookup_elem(&vip_map, &vip);
-		if (!vip_info)
+		if (!vip_info) {
+			count_reason(VIP_MISS_CNTR, 0);
 			return XDP_PASS;
+		}
 	}
 
 	pkt_delta.v1 += 1;
@@ -189,10 +216,14 @@ static inline int process_packet(void *data, __u64 pkt_off,
 
 	is_syn = pckt.flags & F_SYN_SET;
 
-	if (get_packet_dst(&dst, &pckt, vip_info, is_syn))
+	if (get_packet_dst(&dst, &pckt, vip_info, is_syn)) {
+		count_reason(DST_FAIL_CNTR, 0);
 		return XDP_DROP;
-	if (!dst)
+	}
+	if (!dst) {
+		count_reason(DST_FAIL_CNTR, 0);
 		return XDP_DROP;
+	}
 
 	connection_stats_account(&pckt, pkt_bytes);
 
@@ -204,8 +235,10 @@ static inline int process_packet(void *data, __u64 pkt_off,
 
 	cval = bpf_map_lookup_elem(&ctl_array,
 				   &((__u32){ CTL_MAC_INDEX }));
-	if (!cval)
+	if (!cval) {
+		count_reason(CTL_MISS_CNTR, 0);
 		return XDP_DROP;
+	}
 
 	if (!encap_v4(xdp, cval, &pckt, dst, pkt_bytes)) {
 		struct lb_stats encap_delta = { .v1 = 1 };
@@ -231,10 +264,14 @@ int balancer_ingress(struct xdp_md *ctx)
 	data_end = (void *)(long)ctx->data_end;
 
 	eth = data;
-	if ((void *)(eth + 1) > data_end)
+	if ((void *)(eth + 1) > data_end) {
+		count_reason(L2_SHORT_CNTR, data_end - data);
 		return XDP_DROP;
-	if (eth->h_proto != BE_ETH_P_IP)
+	}
+	if (eth->h_proto != BE_ETH_P_IP) {
+		count_reason(L2_NOT_IP_CNTR, bpf_ntohs(eth->h_proto));
 		return XDP_PASS;
+	}
 
 	total_delta.v1 += 1;
 	total_delta.v2 += data_end - data;
