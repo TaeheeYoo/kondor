@@ -15,8 +15,11 @@ struct {
 	__type(value, struct vip_meta);
 } vip_map SEC(".maps");
 
+/* LRU, as Katran's: a full table gives up the flow used longest ago rather
+ * than refusing new ones.
+ */
 struct {
-	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+	__uint(type, BPF_MAP_TYPE_LRU_PERCPU_HASH);
 	__uint(max_entries, DEFAULT_CACHE_SIZE);
 	__type(key, struct flow_key);
 	__type(value, struct conn_cache_entry);
@@ -24,10 +27,10 @@ struct {
 
 /* Per-flow counters, one instance per queue.  A flow is RSS-pinned to a single
  * queue, so its packets all land on that instance's slot; summed across cpus on
- * readback it is the flow's total.
+ * readback it is the flow's total.  LRU like conn_cache, which it follows.
  */
 struct {
-	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+	__uint(type, BPF_MAP_TYPE_LRU_PERCPU_HASH);
 	__uint(max_entries, DEFAULT_CACHE_SIZE);
 	__type(key, struct flow_key);
 	__type(value, struct lb_stats);
