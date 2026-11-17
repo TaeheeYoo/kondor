@@ -26,7 +26,7 @@ static inline __u32 create_encap_ipv4_src(__u16 port, __be32 src)
 __attribute__((__always_inline__))
 static inline void create_v4_hdr(struct iphdr *iph, __u8 tos,
 				 __u32 saddr, __u32 daddr,
-				 __u16 pkt_bytes, __u8 proto)
+				 __u16 pkt_bytes, __u8 proto, __be16 id)
 {
 	__u64 csum = 0;
 
@@ -37,7 +37,7 @@ static inline void create_v4_hdr(struct iphdr *iph, __u8 tos,
 	iph->check = 0;
 	iph->tos = tos;
 	iph->tot_len = bpf_htons(pkt_bytes + sizeof(struct iphdr));
-	iph->id = 0;
+	iph->id = id;
 	iph->daddr = daddr;
 	iph->saddr = saddr;
 	iph->ttl = DEFAULT_TTL;
@@ -52,6 +52,7 @@ static inline bool encap_v4(struct xdp_md *xdp, struct ctl_value *cval,
 {
 	struct ethhdr *new_eth;
 	struct ethhdr *old_eth;
+	struct iphdr *inner;
 	struct iphdr *iph;
 	void *data_end;
 	void *data;
@@ -67,18 +68,23 @@ static inline bool encap_v4(struct xdp_md *xdp, struct ctl_value *cval,
 	new_eth = data;
 	iph = data + sizeof(struct ethhdr);
 	old_eth = data + sizeof(struct iphdr);
+	inner = (void *)(old_eth + 1);
 
 	if ((void *)(new_eth + 1) > data_end ||
 	    (void *)(old_eth + 1) > data_end ||
-	    (void *)(iph + 1) > data_end)
+	    (void *)(iph + 1) > data_end ||
+	    (void *)(inner + 1) > data_end)
 		return false;
 
 	memcpy(new_eth->h_dest, cval->mac, 6);
 	memcpy(new_eth->h_source, old_eth->h_dest, 6);
 	new_eth->h_proto = BE_ETH_P_IP;
 
+	/* The inner header's id outside too: what a tester such as TRex
+	 * marks its latency packets by.
+	 */
 	create_v4_hdr(iph, pckt->tos, ip_src, dst->dst,
-		      pkt_bytes, IPPROTO_IPIP);
+		      pkt_bytes, IPPROTO_IPIP, inner->id);
 	return true;
 }
 
